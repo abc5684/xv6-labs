@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "bitset": "c",
+        "functional": "c",
+        "fstream": "c",
+        "istream": "c",
+        "streambuf": "c",
+        "tuple": "c"
+    }
+}

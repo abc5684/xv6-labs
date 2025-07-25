@@ -16,17 +16,32 @@ extern char end[]; // first address after kernel.
 
 struct run {
   struct run *next;
-};
+};//用于链接空闲物理页的链表节点结构
 
 struct {
   struct spinlock lock;
   struct run *freelist;
-} kmem;
+} kmem[NCPU];
+
+char *kmem_lock_nums[]=
+{
+  "kmem_cpu_0",
+  "kmem_cpu_1",
+  "kmem_cpu_2",
+  "kmem_cpu_3",
+  "kmem_cpu_4",
+  "kmem_cpu_5",
+  "kmem_cpu_6",
+  "kmem_cpu_7",
+};
 
 void
 kinit()
 {
-  initlock(&kmem.lock, "kmem");
+  for(int i=0;i<NCPU;i++)
+  {
+    initlock(&kmem[i].lock, "kmem_lock_nums[i]");
+  }
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -52,14 +67,16 @@ kfree(void *pa)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
+  memset(pa, 1, PGSIZE);//清除页内原有数据，防止后续分配时泄露敏感信息
 
-  r = (struct run*)pa;
-
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  r = (struct run*)pa;// 转换为空闲链表节点
+  push_off();
+  int cpu = cpuid(); // 获取cpu编号。中断关闭时调用cpuid才是安全的，所以上面用push_off关闭中断
+  acquire(&kmem[cpu].lock);//获取自旋锁，确保多 CPU 环境下对空闲链表的操作是原子的（避免并发修改导致链表断裂）。
+  r->next = kmem[cpu].freelist;
+  kmem[cpu].freelist = r;
+  release(&kmem[cpu].lock);
+  pop_off();
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -69,14 +86,40 @@ void *
 kalloc(void)
 {
   struct run *r;
-
-  acquire(&kmem.lock);
-  r = kmem.freelist;
+  push_off();//关闭中断
+  int cpu=cpuid();
+  acquire(&kmem[cpu].lock);
+  if(!kmem[cpu].freelist)//当前cpu已经没有freelist的时候，去其他cpu偷内存页
+  {
+    int steal_left=64;//这里指定偷64个内存页
+    for(int i=0;i<NCPU;i++)
+    {
+      if(i==cpu)continue;//跳过当前cpu
+      acquire(&kmem[i].lock);
+      if(!kmem[i].freelist)     //当前想偷页的cpu也没有锁了，就释放锁并跳过
+      {
+        release(&kmem[i].lock);
+        continue;
+      }
+      struct run *rr=kmem[i].freelist;
+      while(rr&&steal_left)//循环将kmem[i]中的freelist移动到kmem[cpu]中
+      {
+        kmem[i].freelist=rr->next;
+        rr->next=kmem[cpu].freelist;
+        kmem[cpu].freelist=rr;
+        rr=kmem[i].freelist;
+        steal_left--;
+      }
+      release(&kmem[i].lock);
+      if(steal_left==0)break;//偷到指定页数后推出循环
+    }
+  }
+  r=kmem[cpu].freelist;
   if(r)
-    kmem.freelist = r->next;
-  release(&kmem.lock);
-
+    kmem[cpu].freelist = r->next;
+  release(&kmem[cpu].lock);
+  pop_off();//打开中断
   if(r)
-    memset((char*)r, 5, PGSIZE); // fill with junk
+    memset((char*)r, 5, PGSIZE); // fill with junk，填充垃圾值（0x05），避免内核使用未初始化的内存（防止敏感数据泄露）
   return (void*)r;
 }
