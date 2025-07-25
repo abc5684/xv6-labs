@@ -99,10 +99,9 @@ bget(uint dev, uint blockno)
   // 此时只持有驱逐锁，不持有任何桶锁。查询所有桶中的LRU-buf
   struct buf* before_least = 0;     // LRU-buf的前一个块
   uint holding_bucket = -1;         //记录当前持有哪个桶锁
-
   // 循环查询所有桶
   for (int i = 0;i < NBUFMAP_BUCKET;++i) {
-      acquire(&bcache.bufmap_locks[i]);     // 获取当前遍历的桶锁(在找到下一个LRU-buf或驱逐内存之前都不释放)
+      acquire(&bcache.bufmap_locks[i]);// 获取当前遍历的桶锁(在找到下一个LRU-buf或驱逐内存之前都不释放)
       int newfound = 0;// 是否在当前桶找到的新的LRU-buf
       for (b = &bcache.bufmap[i];b->next;b = b->next) {
           if (b->next->refcnt == 0 && (!before_least || b->next->lastuse < before_least->next->lastuse)) {
@@ -118,7 +117,6 @@ bget(uint dev, uint blockno)
           holding_bucket = i;                                   // 把标记 holding_bucket 更改成当前桶锁编号
       }
   }
-
   // 如果没找到任何一个LRU-buf，表示没有空闲缓存块了
   if (!before_least)
       panic("bget: no buffuers");
@@ -128,13 +126,11 @@ bget(uint dev, uint blockno)
   if (holding_bucket != key) {      // 想要偷的块如果不在key桶，就要把块从他所在的桶驱逐出来
       before_least->next = b->next;
       release(&bcache.bufmap_locks[holding_bucket]);
-
       //将LRU-buf添加到key桶
       acquire(&bcache.bufmap_locks[key]);
       b->next = bcache.bufmap[key].next;
       bcache.bufmap[key].next = b;
   }
-
   // 设置新buf的字段
   b->dev = dev;
   b->blockno = blockno;
@@ -194,7 +190,6 @@ brelse(struct buf *b)
 void
 bpin(struct buf* b) {
   uint key = BUFMAP_HASH(b->dev, b->blockno);
-    
   acquire(&bcache.bufmap_locks[key]);
   b->refcnt++;
   release(&bcache.bufmap_locks[key]);
