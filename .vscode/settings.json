@@ -1,0 +1,28 @@
+{
+    "files.associations": {
+        "atomic": "c",
+        "chrono": "c",
+        "cmath": "c",
+        "complex": "c",
+        "unordered_map": "c",
+        "optional": "c",
+        "string_view": "c",
+        "algorithm": "c",
+        "random": "c",
+        "fstream": "c",
+        "functional": "c",
+        "istream": "c",
+        "limits": "c",
+        "mutex": "c",
+        "ostream": "c",
+        "ratio": "c",
+        "sstream": "c",
+        "streambuf": "c",
+        "type_traits": "c",
+        "tuple": "c",
+        "string": "c",
+        "memory_resource": "c",
+        "numeric": "c",
+        "condition_variable": "c"
+    }
+}
